@@ -1,3 +1,6 @@
+const CACHE_STATIC = 'static'
+const CACHE_DYNAMIC = 'dynamic'
+
 // self是一個語法糖，讓我們可以存取Service Worker的背景程式，有寫過網頁的應該都覺得addEventListener這個關鍵字很熟悉，但是在Service Worker裡面，是無法使用click之類我們平常所使用的事件，因為再前一天說過，Service Worker是一套運行再背景的程式，是沒有權限能存取DOM的，所以理所當然能操作DOM的事件在這邊都是無法使用的。
 
 // 在install的事件發生的時候，我們可以快取頁面上最少的必要性資源，快取的容量是有限的，因此，不應該什麼資源都快取起來，所以我們選擇將網頁中，每一頁都有的必要資源快取起來，並以網頁不跑版為前提做選擇。
@@ -10,11 +13,12 @@
 self.addEventListener('install', function (event) {
     console.log('[SW] 安裝(Install) Service Worker!', event)
     event.waitUntil(
-        caches.open('static').then(function (cache) {
+        caches.open(CACHE_STATIC).then(function (cache) {
             cache.addAll([
                 '/',
                 '/favicon.ico',
                 '/index.html',
+                '/offlinePage.html',
                 '/src/css/app.css',
                 '/src/images/demo.jpg',
                 '/src/images/icons/demo-icon144.png',
@@ -31,6 +35,18 @@ self.addEventListener('install', function (event) {
 
 self.addEventListener('activate', function (event) {
     console.log('[SW] 觸發(Activate) Service Worker!', event)
+    event.waitUntil(
+        caches.keys().then(function (keys) {
+            return Promise.all(
+                keys.map(function (key) {
+                    if (key !== CACHE_STATIC && key !== CACHE_DYNAMIC) {
+                        console.log('[SW] 刪除舊的快取')
+                        return caches.delete(key)
+                    }
+                })
+            )
+        })
+    )
     return self.clients.claim()
 })
 
@@ -46,7 +62,7 @@ self.addEventListener('fetch', function (event) {
                 // return fetch(event.request)
                 return fetch(event.request).then(function (res) {
                     // 當抓到沒有快取的資源時，就透過cache.put()方法放進資源中。
-                    caches.open('dynamic').then(function (cache) {
+                    caches.open(CACHE_DYNAMIC).then(function (cache) {
                         // FIXME: 當去抓外部圖片時，response type: 'opaque' 導致無法拿到資源，但再多重新整理一次就 OK 了。
                         cache.put(event.request.url, res.clone())
                         return res
